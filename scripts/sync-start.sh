@@ -9,10 +9,30 @@ source "$HERE/lib.sh" || exit 1
 mutagen daemon start >/dev/null 2>&1 || true
 
 GI="$MIRROR_ROOT/.gitignore"
+
+# Resolve the ignore source. Prefer the local mirror's .gitignore; but when the mirror is a fresh
+# empty dir and the REMOTE is an existing project, the local .gitignore doesn't exist yet — in that
+# case seed it from the REMOTE's .gitignore FIRST, so we don't try to pull huge remote dirs.
+if [ ! -s "$GI" ]; then
+  if remote_gi="$(c4rd_ssh cat "$REMOTE_ROOT/.gitignore" 2>/dev/null)" && [ -n "$remote_gi" ]; then
+    printf '%s\n' "$remote_gi" > "$GI"
+    echo "[c4rd] 本地无 .gitignore → 已从远程 $REMOTE_ROOT/.gitignore 拉取作为同步范围"
+  fi
+fi
+
 args=()
-if [ -f "$GI" ]; then
+if [ -s "$GI" ]; then
   while IFS= read -r line; do args+=(--ignore="$line"); done \
     < <(sed -E 's/\r$//' "$GI" | grep -vE '^[[:space:]]*(#|$)')
+fi
+
+# SAFETY: refuse to create a wide-open (0-ignore) sync — it could pull huge remote dirs and fill the disk.
+if [ "${#args[@]}" -eq 0 ] && [ "${C4RD_ALLOW_EMPTY_IGNORES:-0}" != "1" ]; then
+  echo "[c4rd] 拒绝创建同步:两端都没有 .gitignore(0 条忽略规则)。" >&2
+  echo "       全量同步可能把远程的大目录(数据/模型)拉爆本机磁盘。" >&2
+  echo "       请在 $GI 里列出要排除的大目录(如 /data/  /.venv*/  /logs/  *.pt  *.ckpt),再重试;" >&2
+  echo "       确知安全时可用:  C4RD_ALLOW_EMPTY_IGNORES=1 $0 ${1:-}" >&2
+  exit 1
 fi
 
 exists=0

@@ -116,6 +116,11 @@ Put large/generated things there (`/data/`, `/.venv*/`, `/logs/`, `*.pt`, `*.ckp
 `.gitignore`, run `.claude/c4rd/resync`. **New large output dirs must be added before they can fill
 the local disk.** A file you want local-only (never synced, never committed) also goes in `.gitignore`.
 
+When the local mirror is a **fresh empty directory** and the remote is an existing project,
+`sync-start` **seeds `.gitignore` from the remote's** automatically, so the remote's big dirs are
+excluded on the very first sync. If neither side has a `.gitignore`, it **refuses** to create a
+wide-open sync (which could pull the whole remote and fill your disk) — create one first.
+
 ## Config
 
 `<project>/.claude/c4rd/config.sh` (generated). Notable: `REMOTE_PATH_FIX` — the PATH export used in

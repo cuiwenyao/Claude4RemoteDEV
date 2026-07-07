@@ -97,6 +97,9 @@ cd ~/proj && claude
 (`/data/`、`/.venv*/`、`/logs/`、`*.pt`、`*.ckpt` …)。改完 `.gitignore` 跑 `.claude/c4rd/resync`。
 **新增大产出目录务必先加进 `.gitignore`**,否则会往本机传、可能撑爆磁盘。想「只留本地、不同步不提交」的文件也放进 `.gitignore`。
 
+当本地镜像是**全新空目录**、而远程是已存在的项目时,`sync-start` 会**自动从远程拉取它的 `.gitignore`** 作为同步范围,
+这样首次同步就会正确排除远程的大目录。若两端都没有 `.gitignore`,它会**拒绝**创建全量同步(避免把整个远程拉爆本机磁盘)——请先建一个。
+
 ## 配置
 
 `<project>/.claude/c4rd/config.sh`(生成)。重点:`REMOTE_PATH_FIX` —— 远程登录 shell 里的 PATH 修复,

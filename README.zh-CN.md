@@ -110,6 +110,21 @@ cd ~/proj && claude
 
 `state/session-<id>` > `state/mode`(项目级) > 默认 `off`。失败安全:凡不是恰好等于 `on` 都走本地。
 
+## 安全:删本地文件夹不会清空远程
+
+这是**机制保证**,不只是约定:
+
+- **删掉整个本地项目文件夹(`rm -rf project`)不会删远程。** Mutagen 的 two-way-safe 模式(`sync-start` 已固定)
+  会检测到同步**根目录消失**并**halt**(`Status: Halted due to root deletion`),而不是把删除传播出去。已实测。
+- **事故恢复**:`sync-start` 检测到 halt 会话会**安全重建**,从远程把本地镜像**拉回来**(初次同步从不删远程内容)。
+  于是文件失而复得,远程毫发无损。
+- **被忽略的路径从不参与**:`.gitignore` 命中的一切(大 `data/`、模型、`.venv*`、`.tools/` …)完全在同步之外,
+  删镜像也动不了它们。
+- **干净卸载**:`./uninstall.sh --project <dir>` 会**先终止会话**,之后再删文件夹就与远程解耦了。加 `--purge` 连本地目录一起删。
+
+残留情形:根目录还在、只删**单个文件**属于正常编辑,**会**传播(这是应该的——删源码文件就该在远程也删)。
+远程有 `.git`,这类删除可用 git 恢复。
+
 ## 排错
 
 - **`on` 后命令仍在本地跑**:确认 `settings.json` 里有 hook(`.hooks.PreToolUse[].hooks[].command`)且装了 `jq`。

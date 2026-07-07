@@ -13,9 +13,11 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ---- defaults / arg parsing ----
 PROJECT="$PWD"; ALIAS=""; REMOTE_HOST=""; REMOTE_USER=""; REMOTE_PORT=""
 REMOTE_ROOT=""; MIRROR_ROOT=""; SESSION=""; SSH_KEY="$HOME/.ssh/id_c4rd"
-GEN_KEY=0; ASSUME_YES=0; DO_SYNC=1
+GEN_KEY=0; ASSUME_YES=0; DO_SYNC=1; AUTOSTART=""
 while [ $# -gt 0 ]; do case "$1" in
   --project) PROJECT="$2"; shift 2;;
+  --autostart) AUTOSTART=yes; shift;;
+  --no-autostart) AUTOSTART=no; shift;;
   --remote-host) REMOTE_HOST="$2"; shift 2;;
   --remote-user) REMOTE_USER="$2"; shift 2;;
   --port) REMOTE_PORT="$2"; shift 2;;
@@ -31,7 +33,10 @@ while [ $# -gt 0 ]; do case "$1" in
   *) echo "unknown arg: $1" >&2; exit 2;;
 esac; done
 
-PROJECT="$(cd "$PROJECT" 2>/dev/null && pwd)" || { echo "project dir not found" >&2; exit 1; }
+# Resolve to an absolute path WITHOUT requiring the project dir to exist yet (recovery: it may have
+# been deleted). Parent must exist. We create the dir later, AFTER terminating any stale session.
+PARENT="$(cd "$(dirname "$PROJECT")" 2>/dev/null && pwd)" || { echo "parent dir not found: $(dirname "$PROJECT")" >&2; exit 1; }
+PROJECT="$PARENT/$(basename "$PROJECT")"
 info(){ printf '\033[36m[c4rd]\033[0m %s\n' "$*"; }
 warn(){ printf '\033[33m[c4rd]\033[0m %s\n' "$*" >&2; }
 die(){  printf '\033[31m[c4rd]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -98,6 +103,15 @@ info "测试 SSH 连接…"
 if ssh -o ConnectTimeout=15 "$ALIAS" true 2>/dev/null; then info "SSH OK ✓"
 else warn "SSH 暂时连不通(密钥没装好?网络?)。配置照常写入,稍后可 'ssh $ALIAS' 自检。"; fi
 
+# ---- SAFETY: terminate any pre-existing session BEFORE we repopulate the mirror ----
+# If this project was deleted and is being reinstalled, a stale session could otherwise resume and
+# propagate the "missing files" as deletions to the remote. Terminating first guarantees the sync we
+# (re)create at the end is a FRESH session whose initial sync only repopulates local from remote.
+if command -v mutagen >/dev/null 2>&1 && mutagen sync list "$SESSION" 2>/dev/null | grep -q "Name: $SESSION"; then
+  mutagen sync terminate "$SESSION" >/dev/null 2>&1 || true
+  info "检测到同名旧同步会话,已先终止(安全:重建后将从远程恢复,远程不受影响)"
+fi
+
 # ---- install scripts + config into project .claude/c4rd ----
 C4RD="$PROJECT/.claude/c4rd"
 mkdir -p "$C4RD/state" "$PROJECT/.claude/skills"
@@ -153,6 +167,21 @@ if [ "$DO_SYNC" = 1 ]; then
     echo '      curl -sL -o /tmp/m.tgz "https://github.com/mutagen-io/mutagen/releases/download/$ver/mutagen_linux_amd64_$ver.tar.gz"'
     echo '      sudo tar -xzf /tmp/m.tgz -C /usr/local/bin && mutagen daemon start   # macOS: brew install mutagen-io/mutagen/mutagen'
   fi
+fi
+
+# ---- optional: daemon autostart on boot (systemd) ----
+if [ -z "$AUTOSTART" ]; then
+  if [ "$ASSUME_YES" = 1 ]; then AUTOSTART=no
+  else
+    read -r -p "  设置 mutagen 守护进程开机自启 (systemd,需要 sudo)? [y/N]: " __a </dev/tty || true
+    case "$__a" in y|Y|yes|YES) AUTOSTART=yes;; *) AUTOSTART=no;; esac
+  fi
+fi
+if [ "$AUTOSTART" = yes ]; then
+  bash "$C4RD/install-daemon-service.sh" \
+    || warn "开机自启设置失败(权限?),可稍后手动:bash $C4RD/install-daemon-service.sh"
+else
+  info "未设开机自启。B 重启后需 'mutagen daemon start' 恢复同步(或稍后 bash $C4RD/install-daemon-service.sh)"
 fi
 
 echo

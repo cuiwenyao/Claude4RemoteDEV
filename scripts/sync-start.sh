@@ -35,10 +35,21 @@ if [ "${#args[@]}" -eq 0 ] && [ "${C4RD_ALLOW_EMPTY_IGNORES:-0}" != "1" ]; then
   exit 1
 fi
 
-exists=0
+exists=0; halted=0; mirror_empty=0
 mutagen sync list "$SESSION" 2>/dev/null | grep -q "Name: $SESSION" && exists=1
+mutagen sync list "$SESSION" 2>/dev/null | grep -i '^Status:' | grep -qi 'halt' && halted=1
+{ [ ! -d "$MIRROR_ROOT" ] || [ -z "$(ls -A "$MIRROR_ROOT" 2>/dev/null)" ]; } && mirror_empty=1
 
-if [ "${1:-}" = "--force" ] && [ "$exists" = 1 ]; then
+# Rebuild fresh when: --force, the session halted, OR a session exists but the local mirror is
+# empty/missing (i.e. the folder was deleted). Rebuilding is the SAFE RECOVERY path:
+#  - we terminate the stale session FIRST (stops its watcher, so a recreated-empty dir can't be
+#    scanned-and-propagated as a mass deletion), THEN
+#  - create a fresh two-way-safe session; its initial sync repopulates the empty local mirror FROM
+#    the remote and never deletes remote content.
+if [ "$exists" = 1 ] && { [ "${1:-}" = "--force" ] || [ "$halted" = 1 ] || [ "$mirror_empty" = 1 ]; }; then
+  if [ "$halted" = 1 ] || [ "$mirror_empty" = 1 ]; then
+    echo "[c4rd] 本地镜像为空/缺失且已有会话(通常是目录被删)→ 安全重建:先终止旧会话,再从远程恢复本地,远程不受影响"
+  fi
   mutagen sync terminate "$SESSION" >/dev/null 2>&1 || true
   exists=0
 fi
@@ -47,8 +58,11 @@ if [ "$exists" = 1 ]; then
   echo "[c4rd] sync '$SESSION' already running (use 'resync' to rebuild scope from .gitignore)"
   mutagen sync flush "$SESSION" >/dev/null 2>&1 || true
 else
+  mkdir -p "$MIRROR_ROOT"
   echo "[c4rd] creating sync '$SESSION' (${#args[@]} ignore rules from .gitignore)"
-  mutagen sync create --name="$SESSION" --ignore-vcs --symlink-mode=ignore \
+  # -m two-way-safe is pinned on purpose: it gives the "Halted due to root deletion" protection,
+  # so deleting the whole local project folder never wipes the remote.
+  mutagen sync create --name="$SESSION" -m two-way-safe --ignore-vcs --symlink-mode=ignore \
     "${args[@]}" "$MIRROR_ROOT" "$REMOTE_ENDPOINT"
   mutagen sync flush "$SESSION" >/dev/null 2>&1 || true
 fi

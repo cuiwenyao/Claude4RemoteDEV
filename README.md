@@ -108,6 +108,9 @@ Long jobs go in a remote tmux; read remote-only results with `.claude/c4rd/cpull
 | `resync` | rebuild sync scope after editing `.gitignore` |
 | `c '<cmd>'` | manually run a command on the remote (works even when routing is off) |
 | `cpull <relpath>` | fetch remote-only results (excluded from sync) into the mirror |
+| `install-daemon-service.sh` | enable the Mutagen daemon as a systemd service (boot autostart) |
+
+Repo root: `setup.sh` (install), `uninstall.sh --project <dir>` (safe removal — terminates sync first).
 
 ## Sync scope = `.gitignore`
 
@@ -132,6 +135,25 @@ locally and no path rewriting is done.
 
 `state/session-<id>` > `state/mode` (project) > default `off`. Fail-safe: any value other than exactly
 `on` routes locally.
+
+## Safety: deleting the local folder cannot wipe the remote
+
+This is enforced by mechanism, not just by convention:
+
+- **Deleting the entire local project folder (`rm -rf project`) does NOT delete the remote.** Mutagen's
+  two-way-safe mode (pinned by `sync-start`) detects that the sync *root* disappeared and **halts**
+  the session (`Status: Halted due to root deletion`) instead of propagating the deletion. Verified.
+- **Recovery after such a delete**: `sync-start` detects the halted session and **rebuilds it fresh**,
+  which repopulates the local mirror **from** the remote (initial sync never deletes remote content).
+  So you get your files back and the remote is untouched.
+- **Ignored paths are never touched.** Everything matched by `.gitignore` (big `data/`, models,
+  `.venv*`, `.tools/`, …) is outside sync entirely — deleting the mirror can never affect them.
+- **Clean teardown**: `./uninstall.sh --project <dir>` terminates the session *first*, so any later
+  folder deletion is decoupled from the remote. Add `--purge` to also delete the local dir.
+
+Residual case: deleting *individual files* while the root remains is normal editing and **does**
+propagate (that's intended — removing a source file should remove it on the remote). The remote keeps
+`.git`, so those are recoverable via git.
 
 ## Troubleshooting
 

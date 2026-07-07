@@ -1,0 +1,13 @@
+#!/bin/bash
+# cpull <relpath> [relpath...] — fetch result files/dirs from the remote into the local mirror,
+# for reading with Claude's native tools. Use for paths EXCLUDED from sync (logs, checkpoints, data).
+# Paths are relative to the project root.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$HERE/lib.sh" || exit 1
+[ $# -gt 0 ] || { echo "usage: cpull <relpath> [relpath...]" >&2; exit 2; }
+for rel in "$@"; do
+  mkdir -p "$MIRROR_ROOT/$(dirname "$rel")"
+  rsync -az "$REMOTE_ALIAS:$REMOTE_ROOT/$rel" "$MIRROR_ROOT/$(dirname "$rel")/"
+done

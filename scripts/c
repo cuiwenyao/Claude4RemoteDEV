@@ -1,0 +1,12 @@
+#!/bin/bash
+# c '<command>' — manually run a command on the remote (escape hatch / works even when routing is off).
+# Same mechanism the hook uses: flush sync, then run in a remote login shell at the mapped dir.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$HERE/lib.sh" || exit 1
+[ $# -gt 0 ] || { echo "usage: c '<command>'" >&2; exit 2; }
+if ! c4rd_probe; then echo "[c4rd] remote '$REMOTE_HOST' unreachable" >&2; exit 1; fi
+remote_pwd="$(c4rd_map_remote_pwd "$PWD")"
+mutagen sync flush "$SESSION" >/dev/null 2>&1 || true
+printf '%s\ncd %q || exit 1\n%s\n' "$REMOTE_PATH_FIX" "$remote_pwd" "$*" | c4rd_ssh bash -l -s

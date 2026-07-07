@@ -1,0 +1,7 @@
+# local test scratch
+/scratch/
+*.log
+.DS_Store
+
+# never commit a populated config (it holds host/paths); ship config.example.sh only
+config.sh

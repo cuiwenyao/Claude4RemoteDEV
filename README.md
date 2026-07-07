@@ -1,5 +1,7 @@
 # Claude4RemoteDEV
 
+**English** | [简体中文](README.zh-CN.md) · [Background & manual method](docs/remote-claude.md)
+
 Run **Claude Code on your local/near machine, execute on a remote GPU/dev server.** Your code, data,
 models and GPUs live on the remote; Claude edits a local mirror (instant Read/Edit/Grep) and its
 Bash commands are transparently forwarded to the remote over SSH. Files stay in **real-time
@@ -27,6 +29,29 @@ Claude (local) ──Bash tool──▶ PreToolUse hook (route-bash.sh)
 Read/Edit/Grep/Glob ──▶ local mirror  ⇄⇄ Mutagen real-time bidi sync ⇄⇄ remote (authoritative)
 ```
 
+```mermaid
+flowchart TB
+    subgraph LOCAL["Local machine — runs Claude Code"]
+        C["Claude Code"]
+        H["PreToolUse hook<br/>route-bash.sh"]
+        R["c4rd-exec.sh (runner)"]
+        M[("Local mirror — code")]
+        X["run locally"]
+    end
+    subgraph REMOTE["Remote server — GPU / data / models"]
+        RS["login shell (bash -l)"]
+        RM[("Project — authoritative")]
+    end
+    C -->|"Bash tool"| H
+    H -->|"mode off / bypass"| X
+    H -->|"mode on: rewrite command"| R
+    R -->|"flush sync + ssh"| RS
+    R -.->|"remote unreachable → fallback"| X
+    RS --> RM
+    C -->|"Read / Edit / Grep"| M
+    M <-->|"Mutagen real-time bidi<br/>scope = .gitignore"| RM
+```
+
 - **Interception** uses Claude Code's officially-supported `PreToolUse` hook (`updatedInput`), not a
   shell replacement — so it's robust across versions.
 - **Sync scope is driven by `.gitignore`** (single source of truth for both git and Mutagen). Big/
@@ -43,7 +68,7 @@ Read/Edit/Grep/Glob ──▶ local mirror  ⇄⇄ Mutagen real-time bidi sync �
 ## Install
 
 ```bash
-git clone https://github.com/<you>/Claude4RemoteDEV.git ~/Claude4RemoteDEV
+git clone https://github.com/cuiwenyao/Claude4RemoteDEV ~/Claude4RemoteDEV
 cd /path/to/your/project           # the project you want to develop
 ~/Claude4RemoteDEV/setup.sh        # interactive; --gen-key to create an SSH key
 ```
@@ -117,6 +142,12 @@ locally and no path rewriting is done.
 
 Remove the `PreToolUse` entry from `<project>/.claude/settings.json`, delete `<project>/.claude/c4rd/`
 and `<project>/.claude/skills/claude4remotedev/`, and `mutagen sync terminate <session>`.
+
+## Docs
+
+- [简体中文 README](README.zh-CN.md)
+- [docs/remote-claude.md](docs/remote-claude.md) — background and the underlying **manual** method
+  (SSH + Mutagen + `c` helper) this toolkit automates; useful for understanding and customizing.
 
 ## License
 

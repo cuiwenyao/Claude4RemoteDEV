@@ -140,9 +140,16 @@ locally and no path rewriting is done.
 
 This is enforced by mechanism, not just by convention:
 
-- **Deleting the entire local project folder (`rm -rf project`) does NOT delete the remote.** Mutagen's
-  two-way-safe mode (pinned by `sync-start`) detects that the sync *root* disappeared and **halts**
-  the session (`Status: Halted due to root deletion`) instead of propagating the deletion. Verified.
+- **Deleting the whole local folder — or emptying its contents — does NOT delete the remote.** Mutagen's
+  two-way-safe mode (pinned by `sync-start`) **halts** the session on either catastrophe
+  (`Halted due to root deletion` / `Halted due to one-sided root emptying`) instead of propagating it.
+  The daemon **never auto-propagates a mass deletion** — verified: `rm -rf project` (with or without
+  recreating an empty dir), left to the daemon, leaves the remote fully intact.
+- The only ways the remote can actually lose content: (a) deleting **some** files while others remain
+  (normal editing — it propagates, and remote `.git` recovers it), or (b) **manually** forcing a
+  halted session (`mutagen sync flush`/`resume`) — a deliberate override, not an accident. As a guard,
+  `c4rd`'s automatic pre-command flush is **skipped whenever the session is halted**, so the tool
+  itself can never turn an accidental delete into a remote wipe.
 - **Recovery after such a delete**: `sync-start` detects the halted session and **rebuilds it fresh**,
   which repopulates the local mirror **from** the remote (initial sync never deletes remote content).
   So you get your files back and the remote is untouched.

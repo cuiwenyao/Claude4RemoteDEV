@@ -114,8 +114,13 @@ cd ~/proj && claude
 
 这是**机制保证**,不只是约定:
 
-- **删掉整个本地项目文件夹(`rm -rf project`)不会删远程。** Mutagen 的 two-way-safe 模式(`sync-start` 已固定)
-  会检测到同步**根目录消失**并**halt**(`Status: Halted due to root deletion`),而不是把删除传播出去。已实测。
+- **删掉整个本地文件夹、或清空其内容,都不会删远程。** Mutagen 的 two-way-safe 模式(`sync-start` 已固定)
+  遇到这两种灾难都会**halt**(`Halted due to root deletion` / `Halted due to one-sided root emptying`),
+  而不传播。**守护进程绝不会自动传播整目录删除**——已实测:`rm -rf project`(无论是否重建空目录),
+  交给守护进程自己跑,远程始终完好。
+- 远程真正会丢内容只有两种途径:(a) 删**部分**文件、其余保留(正常编辑,会传播,远程 `.git` 可恢复);
+  (b) **手动**对已 halt 的会话强制 `mutagen sync flush`/`resume`(刻意越过保护,非意外)。作为保险,
+  `c4rd` 每条命令前的自动 flush 在**会话 halt 时会跳过**,所以工具本身绝不会把误删变成远程清空。
 - **事故恢复**:`sync-start` 检测到 halt 会话会**安全重建**,从远程把本地镜像**拉回来**(初次同步从不删远程内容)。
   于是文件失而复得,远程毫发无损。
 - **被忽略的路径从不参与**:`.gitignore` 命中的一切(大 `data/`、模型、`.venv*`、`.tools/` …)完全在同步之外,

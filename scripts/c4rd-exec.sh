@@ -18,7 +18,7 @@ if ! c4rd_probe; then
 fi
 
 remote_pwd="$(c4rd_map_remote_pwd "$PWD")"
-mutagen sync flush "$SESSION" >/dev/null 2>&1 || true   # ensure latest edits are on the remote
+c4rd_flush   # ensure latest edits are on the remote — but never flush a halted (deleted-mirror) session
 
 run_remote() {
   printf '%s\ncd %q || { echo "[c4rd] remote dir missing: %s" >&2; exit 1; }\n%s\n' \

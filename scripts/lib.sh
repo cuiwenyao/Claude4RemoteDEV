@@ -42,6 +42,24 @@ c4rd_mode() {
   echo "off"
 }
 
+# c4rd_sync_healthy — return 0 if the session exists and is NOT halted. A halted session (e.g. the
+# mirror was emptied/deleted → Mutagen's safety halt) must never be flushed automatically, or the
+# flush could force the mass deletion through to the remote. Callers skip flush when this is false.
+c4rd_sync_healthy() {
+  mutagen sync list "$SESSION" 2>/dev/null | grep -i '^Status:' | grep -qi 'halt' && return 1
+  return 0
+}
+
+# c4rd_flush — flush the session ONLY when healthy; warn (and protect remote) when halted.
+c4rd_flush() {
+  if c4rd_sync_healthy; then
+    mutagen sync flush "$SESSION" >/dev/null 2>&1 || true
+  else
+    echo "[c4rd] 同步处于 halt(镜像可能被删/清空)——跳过自动 flush 以保护远程。" >&2
+    echo "       运行  '$C4RD_DIR/sync-start.sh'  从远程安全恢复本地。" >&2
+  fi
+}
+
 # c4rd_map_remote_pwd [local_pwd] — map a path under MIRROR_ROOT to its REMOTE_ROOT twin.
 c4rd_map_remote_pwd() {
   local p="${1:-$PWD}"
